@@ -8,6 +8,16 @@ A Python application that analyzes your Swiggy order history by extracting data 
 - Interactive visualizations using Plotly and Dash
 - Clean, modern dashboard interface
 
+## Dashboard Screenshots
+
+### Summary Statistics and Monthly Trends
+![Dashboard Summary](assets/images/dashboard1.png)
+*Summary statistics showing total spend, orders, and monthly trends*
+
+### Restaurant Analysis and Time Patterns
+![Dashboard Analysis](assets/images/dashboard2.png)
+*Detailed analysis of restaurant preferences and ordering patterns*
+
 ## Setup
 
 ### 1. Gmail API Setup
@@ -77,6 +87,8 @@ swiggy_analysis/
 │   ├── dashboard.py        # Visualization dashboard
 │   ├── email_text_parser.py # Email parsing logic
 │   └── gmail_client.py     # Gmail API client
+├── assets/
+│   └── images/             # Dashboard screenshots
 ├── .env.example            # Environment variables template
 ├── .gitignore             # Git ignore rules
 ├── README.md              # Project documentation
