@@ -18,24 +18,29 @@ A Python application that analyzes your Swiggy order history by extracting data 
    - Search for "Gmail API"
    - Click "Enable"
 
-4. Configure OAuth consent screen:
-   - Go to "APIs & Services" → "OAuth consent screen"
-   - Choose "External" user type
-   - Fill in the application name and user support email
-   - Add your email as a developer contact
-   - Save and continue
-   - Under "Scopes", add Gmail API scopes:
+
+- Under "Scopes", add Gmail API scopes:
      - `https://www.googleapis.com/auth/gmail.readonly`
    - Under "Test users", add your email address
    - Save and continue
+ 
+
+4. Configure OAuth consent screen:
+   - Go to "APIs & Services" → "OAuth consent screen"
+   - Fill in the application name and user support email
+   - Choose "External" user type
+   - Add your email as a developer contact
+   - Save and continue
 
 5. Create OAuth 2.0 credentials:
-   - Go to "Credentials" → "Create Credentials" → "OAuth client ID"
+   - Go "Create client" → "OAuth client ID"
    - Choose "Desktop app" as application type
    - Give it a name (e.g., "Swiggy Analysis")
    - Click "Create"
    - Download the credentials JSON file
    - Rename it to `credentials.json` and place it in the `auth/` directory
+   - Go to "Audience" → "Test users" 
+   - Under "Add user", add your email address 
 
 Note: Since this is in "Testing" mode, only added test users can access the application. This is fine for personal use. For public distribution, the app would need to be verified by Google.
 
