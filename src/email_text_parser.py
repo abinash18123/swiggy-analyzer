@@ -16,8 +16,10 @@ class SwiggyEmailParser:
     def extract_amount(self, amount_str: str) -> float:
         """Extract amount from string with ₹ symbol"""
         try:
-            # Remove ₹ symbol and any commas, then convert to float
+            # Remove ₹ symbol, any commas, and handle negative amounts (discounts)
             amount = amount_str.replace('₹', '').replace(',', '').strip()
+            if amount.startswith('-'):
+                amount = amount[1:]  # Remove minus sign
             return float(amount)
         except (ValueError, AttributeError):
             return 0.0
@@ -27,10 +29,22 @@ class SwiggyEmailParser:
         if not email_text:
             return None
 
-        # Convert HTML to clean text
+        # Convert HTML to clean text while preserving some structure
         soup = BeautifulSoup(email_text, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
+            
+        # Get text with preserved line breaks
         text = soup.get_text(separator='\n')
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        
+        # Clean up text
+        lines = []
+        for line in text.split('\n'):
+            line = line.strip()
+            if line and not line.isspace():
+                lines.append(line)
 
         order_info = {
             'restaurant_name': None,
@@ -42,24 +56,35 @@ class SwiggyEmailParser:
         }
 
         # Extract restaurant name
+        restaurant_found = False
         for i, line in enumerate(lines):
             if line == "Restaurant":
                 for next_line in lines[i+1:]:
-                    if next_line and next_line not in ["Order", "Your Order Summary:"]:
+                    if next_line and next_line not in ["Order", "Your Order Summary:", "Order No:"]:
                         order_info['restaurant_name'] = next_line
+                        restaurant_found = True
                         break
+                if restaurant_found:
+                    break
 
         # Extract order and delivery times
         for i, line in enumerate(lines):
-            if line == "Order placed at:":
-                for next_line in lines[i+1:]:
-                    if next_line:
-                        order_info['order_time'] = self.parse_datetime(next_line)
+            if "Order placed at:" in line:
+                # Look for the datetime in this line or the next few lines
+                for j in range(i, min(i + 3, len(lines))):
+                    possible_date = lines[j].replace("Order placed at:", "").strip()
+                    parsed_date = self.parse_datetime(possible_date)
+                    if parsed_date:
+                        order_info['order_time'] = parsed_date
                         break
-            elif line == "Order delivered at:":
-                for next_line in lines[i+1:]:
-                    if next_line:
-                        order_info['delivery_time'] = self.parse_datetime(next_line)
+            
+            elif "Order delivered at:" in line:
+                # Look for the datetime in this line or the next few lines
+                for j in range(i, min(i + 3, len(lines))):
+                    possible_date = lines[j].replace("Order delivered at:", "").strip()
+                    parsed_date = self.parse_datetime(possible_date)
+                    if parsed_date:
+                        order_info['delivery_time'] = parsed_date
                         break
 
         # Calculate delivery duration
@@ -67,24 +92,43 @@ class SwiggyEmailParser:
             duration = order_info['delivery_time'] - order_info['order_time']
             order_info['delivery_duration_mins'] = duration.total_seconds() / 60
 
-        # Extract amounts
+        # Extract amounts using more flexible patterns
         for i, line in enumerate(lines):
-            if line == "Order Total:":
-                for next_line in lines[i+1:]:
-                    if next_line:
-                        order_info['total_amount'] = self.extract_amount(next_line)
+            # Look for total amount
+            if "Order Total:" in line or "Paid Via" in line:
+                # Check this line and next few lines for amount
+                for j in range(i, min(i + 3, len(lines))):
+                    if '₹' in lines[j]:
+                        amount = self.extract_amount(lines[j])
+                        if amount > 0:  # Sanity check
+                            order_info['total_amount'] = amount
+                            break
+
+            # Look for discount
+            if "Discount Applied" in line:
+                # Check this line and next few lines for amount
+                for j in range(i, min(i + 3, len(lines))):
+                    if '₹' in lines[j] and '-' in lines[j]:
+                        order_info['discount_amount'] = self.extract_amount(lines[j])
                         break
-            elif "Discount Applied" in line:
-                for next_line in lines[i+1:]:
-                    if next_line:
-                        order_info['discount_amount'] = self.extract_amount(next_line)
+
+        # Additional validation
+        if not order_info['total_amount']:
+            # Try finding total amount by looking for specific patterns
+            for line in lines:
+                if "Order Total:" in line or "Paid Via" in line or "Total Payable:" in line:
+                    amounts = re.findall(r'₹\s*[\d,]+(?:\.\d{2})?', line)
+                    if amounts:
+                        order_info['total_amount'] = self.extract_amount(amounts[0])
                         break
 
         # Validate required fields
-        if not all([order_info['restaurant_name'], 
-                   order_info['order_time'],
-                   order_info['delivery_time'],
-                   order_info['total_amount'] is not None]):
+        if not all([
+            order_info['restaurant_name'],
+            order_info['order_time'],
+            order_info['delivery_time'],
+            order_info['total_amount'] is not None
+        ]):
             return None
 
         return order_info
