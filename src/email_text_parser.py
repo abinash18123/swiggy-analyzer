@@ -9,9 +9,14 @@ class SwiggyEmailParser:
     def parse_datetime(self, datetime_str: str) -> datetime:
         """Parse Swiggy's datetime format"""
         try:
+            # First try the standard format
             return datetime.strptime(datetime_str.strip(), "%A, %B %d, %Y %I:%M %p")
         except (ValueError, AttributeError):
-            return None
+            try:
+                # Try alternative format (if any)
+                return datetime.strptime(datetime_str.strip(), "%d %B %Y %I:%M %p")
+            except (ValueError, AttributeError):
+                return None
 
     def extract_amount(self, amount_str: str) -> float:
         """Extract amount from string with ₹ symbol"""
@@ -24,9 +29,11 @@ class SwiggyEmailParser:
         except (ValueError, AttributeError):
             return 0.0
 
-    def parse_email(self, email_text: str) -> dict:
+    def parse_email(self, email_text: str, debug: bool = False) -> dict:
         """Parse Swiggy delivery email text to extract order details"""
         if not email_text:
+            if debug:
+                print("Empty email text")
             return None
 
         # Convert HTML to clean text while preserving some structure
@@ -46,6 +53,11 @@ class SwiggyEmailParser:
             if line and not line.isspace():
                 lines.append(line)
 
+        if debug:
+            print("\nCleaned Text Lines:")
+            for i, line in enumerate(lines[:50]):  # Print first 50 lines
+                print(f"{i}: {line}")
+
         order_info = {
             'restaurant_name': None,
             'order_time': None,
@@ -58,9 +70,9 @@ class SwiggyEmailParser:
         # Extract restaurant name
         restaurant_found = False
         for i, line in enumerate(lines):
-            if line == "Restaurant":
-                for next_line in lines[i+1:]:
-                    if next_line and next_line not in ["Order", "Your Order Summary:", "Order No:"]:
+            if line == "Restaurant" or "Ordered from:" in line:
+                for next_line in lines[i+1:i+5]:  # Look at next few lines
+                    if next_line and next_line not in ["Order", "Your Order Summary:", "Order No:", "Delivery To:"]:
                         order_info['restaurant_name'] = next_line
                         restaurant_found = True
                         break
@@ -69,6 +81,7 @@ class SwiggyEmailParser:
 
         # Extract order and delivery times
         for i, line in enumerate(lines):
+            # Look for order time
             if "Order placed at:" in line:
                 # Look for the datetime in this line or the next few lines
                 for j in range(i, min(i + 3, len(lines))):
@@ -76,8 +89,11 @@ class SwiggyEmailParser:
                     parsed_date = self.parse_datetime(possible_date)
                     if parsed_date:
                         order_info['order_time'] = parsed_date
+                        if debug:
+                            print(f"\nFound order time: {parsed_date}")
                         break
             
+            # Look for delivery time
             elif "Order delivered at:" in line:
                 # Look for the datetime in this line or the next few lines
                 for j in range(i, min(i + 3, len(lines))):
@@ -85,6 +101,8 @@ class SwiggyEmailParser:
                     parsed_date = self.parse_datetime(possible_date)
                     if parsed_date:
                         order_info['delivery_time'] = parsed_date
+                        if debug:
+                            print(f"\nFound delivery time: {parsed_date}")
                         break
 
         # Calculate delivery duration
@@ -95,13 +113,15 @@ class SwiggyEmailParser:
         # Extract amounts using more flexible patterns
         for i, line in enumerate(lines):
             # Look for total amount
-            if "Order Total:" in line or "Paid Via" in line:
+            if any(marker in line for marker in ["Order Total:", "Paid Via", "Total Payable:"]):
                 # Check this line and next few lines for amount
                 for j in range(i, min(i + 3, len(lines))):
                     if '₹' in lines[j]:
                         amount = self.extract_amount(lines[j])
                         if amount > 0:  # Sanity check
                             order_info['total_amount'] = amount
+                            if debug:
+                                print(f"\nFound total amount: {amount}")
                             break
 
             # Look for discount
@@ -110,25 +130,36 @@ class SwiggyEmailParser:
                 for j in range(i, min(i + 3, len(lines))):
                     if '₹' in lines[j] and '-' in lines[j]:
                         order_info['discount_amount'] = self.extract_amount(lines[j])
+                        if debug:
+                            print(f"\nFound discount amount: {order_info['discount_amount']}")
                         break
 
         # Additional validation
         if not order_info['total_amount']:
             # Try finding total amount by looking for specific patterns
             for line in lines:
-                if "Order Total:" in line or "Paid Via" in line or "Total Payable:" in line:
+                if any(marker in line for marker in ["Order Total:", "Paid Via", "Total Payable:"]):
                     amounts = re.findall(r'₹\s*[\d,]+(?:\.\d{2})?', line)
                     if amounts:
                         order_info['total_amount'] = self.extract_amount(amounts[0])
+                        if debug:
+                            print(f"\nFound total amount (pattern): {order_info['total_amount']}")
                         break
 
         # Validate required fields
-        if not all([
-            order_info['restaurant_name'],
-            order_info['order_time'],
-            order_info['delivery_time'],
-            order_info['total_amount'] is not None
-        ]):
-            return None
+        required_fields = [
+            'restaurant_name',
+            'order_time',
+            'delivery_time',
+            'total_amount'
+        ]
+        
+        missing_fields = [field for field in required_fields 
+                         if not order_info[field]]
+        
+        if missing_fields:
+            if debug:
+                print("\nMissing required fields:", missing_fields)
+            return None if not debug else order_info
 
         return order_info

@@ -16,7 +16,25 @@ class Config:
     
     # Gmail search parameters
     SWIGGY_SENDER = 'noreply@swiggy.in'
-    DELIVERY_SUBJECT_KEYWORDS = ["successfully delivered", "order delivered"]
+    
+    # We'll focus primarily on sender and look for order-related content
+    # rather than relying heavily on subject lines
+    DELIVERY_SUBJECT_KEYWORDS = [
+        "delivered",
+        "delivery",
+        "order",
+        "swiggy"
+    ]
+    
+    # Content validation keywords that indicate a Swiggy order email
+    ORDER_CONTENT_MARKERS = [
+        "Your Order Summary:",
+        "Order No:",
+        "Order placed at:",
+        "Order delivered at:",
+        "Ordered from:",
+        "Delivery To:"
+    ]
     
     # Date range for analysis (None means all emails)
     START_DATE = os.getenv('START_DATE', '2016/01/01')  # Format: 'YYYY/MM/DD'

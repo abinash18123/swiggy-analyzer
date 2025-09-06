@@ -1,5 +1,5 @@
 """
-Data pipeline for collecting Swiggy order data from email text
+Simplified data pipeline for collecting Swiggy order data from email text
 """
 import os
 import csv
@@ -16,7 +16,7 @@ class SwiggyDataPipeline:
         self.email_parser = SwiggyEmailParser()
         self.csv_orders_file = os.path.join(Config.BASE_DIR, 'swiggy_orders.csv')
         
-    def run_pipeline(self, max_emails: int = 500):
+    def run_pipeline(self, max_emails: int = 5000):
         """Run the email processing pipeline"""
         print("🚀 Starting Swiggy Data Pipeline...")
         
@@ -32,10 +32,13 @@ class SwiggyDataPipeline:
         # Step 2: Process each email
         print("\n🔄 Step 2: Processing emails...")
         processed_orders = []
+        failed_emails = []
         
         for i, message in enumerate(messages, 1):
             message_id = message['id']
-            print(f"\nProcessing email {i}/{len(messages)} (ID: {message_id})")
+            print(f"\n{'='*80}")
+            print(f"Processing email {i}/{len(messages)} (ID: {message_id})")
+            print(f"{'='*80}")
             
             # Get email details
             email_data = self.gmail_client.get_email_details(message_id)
@@ -43,38 +46,70 @@ class SwiggyDataPipeline:
                 print(f"  ❌ Failed to get email details")
                 continue
             
-            # Print full email details for the first email
-            if i == 1:
-                print("\nFull Email Details:")
-                print("Subject:", email_data.get('subject', ''))
-                print("From:", email_data.get('from', ''))
-                print("Date:", email_data.get('date', ''))
-                print("\nEmail body:")
-                print(email_data.get('body', ''))
-                print("\n" + "="*50 + "\n")
+            # Print email details for debugging
+            print("\nEmail Details:")
+            print(f"Subject: {email_data.get('subject', '')}")
+            print(f"From: {email_data.get('from', '')}")
+            print(f"Date: {email_data.get('date', '')}")
+            print("\nEmail Content Markers Found:")
+            
+            # Check for content markers
+            for marker in Config.ORDER_CONTENT_MARKERS:
+                if marker in email_data.get('body', ''):
+                    print(f"✅ Found: {marker}")
+                else:
+                    print(f"❌ Missing: {marker}")
             
             # Parse email body
             email_body = email_data.get('body', '')
             order_info = self.email_parser.parse_email(email_body)
             
             if not order_info:
-                print(f"  ❌ Failed to parse email/Instacart order")
+                print(f"\n❌ Failed to parse email")
+                print("\nExtracted Fields:")
+                # Try parsing anyway to see what we got
+                temp_info = self.email_parser.parse_email(email_body, debug=True)
+                if temp_info:
+                    for key, value in temp_info.items():
+                        print(f"{key}: {value}")
+                failed_emails.append({
+                    'id': message_id,
+                    'subject': email_data.get('subject', ''),
+                    'date': email_data.get('date', '')
+                })
                 continue
+                
+            print("\n✅ Successfully parsed email")
+            print("\nExtracted Order Details:")
+            for key, value in order_info.items():
+                print(f"{key}: {value}")
                 
             order_info['email_id'] = message_id
             processed_orders.append(order_info)
-            print(f"  ✅ Successfully processed")
         
         # Step 3: Save to CSV
         if processed_orders:
             self._save_to_csv(processed_orders)
             print(f"\n✅ Successfully processed {len(processed_orders)} orders")
+            success_rate = (len(processed_orders) / len(messages)) * 100
+            print(f"Success rate: {success_rate:.2f}%")
         else:
             print("\n❌ No orders were successfully processed")
+            
+        # Print failed email summary
+        if failed_emails:
+            print("\nFailed Emails Summary:")
+            print(f"Total failed: {len(failed_emails)}")
+            print("\nFirst 5 failed emails:")
+            for email in failed_emails[:5]:
+                print(f"\nID: {email['id']}")
+                print(f"Subject: {email['subject']}")
+                print(f"Date: {email['date']}")
     
     def _save_to_csv(self, orders: List[Dict]):
         """Save processed orders to CSV"""
         fieldnames = [
+            'email_id',
             'restaurant_name',
             'order_time',
             'delivery_time',
@@ -90,6 +125,7 @@ class SwiggyDataPipeline:
                 
                 for order in orders:
                     row = {
+                        'email_id': order.get('email_id'),
                         'restaurant_name': order.get('restaurant_name'),
                         'order_time': order.get('order_time').strftime('%Y-%m-%d %H:%M:%S') if order.get('order_time') else None,
                         'delivery_time': order.get('delivery_time').strftime('%Y-%m-%d %H:%M:%S') if order.get('delivery_time') else None,
@@ -107,7 +143,7 @@ class SwiggyDataPipeline:
 def main():
     """Main function to run the data pipeline"""
     pipeline = SwiggyDataPipeline()
-    pipeline.run_pipeline(max_emails=500)  # Process all emails
+    pipeline.run_pipeline(max_emails=5000)  # Increased max emails
 
 if __name__ == "__main__":
     main()
