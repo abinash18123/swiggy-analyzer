@@ -16,14 +16,7 @@ A Python application that analyzes your Swiggy order history by extracting data 
 3. Enable the Gmail API for your project:
    - Go to "APIs & Services" → "Library"
    - Search for "Gmail API"
-   - Click "Enable"
-
-
-- Under "Scopes", add Gmail API scopes:
-     - `https://www.googleapis.com/auth/gmail.readonly`
-   - Under "Test users", add your email address
-   - Save and continue
- 
+   - Click "Enable" 
 
 4. Configure OAuth consent screen:
    - Go to "APIs & Services" → "OAuth consent screen"
